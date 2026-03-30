@@ -1,33 +1,44 @@
 const { generateMarksheetPdf } = require("./template");
 
 const samplePayload = {
-  systemName: "SchoolERP Pro",
   examType: "Annual",
-  session: "2025-2026",
+  session: "2025-26",
   school: {
     name: "MAA GAYATRI VIDYA MANDIR",
-    address: "Sahorbaghat, Kusheshwar asthan,Darbhanga, Bihar - 848213",
+    address: "Sahorbaghat, Kusheshwar asthan, Darbhanga, Bihar - 848213",
     phone: "+91 9931434644",
     email: "mgvmeducation@gmail.com",
     logoUrl:
       "https://ik.imagekit.io/bhupeshb7/H2djMRhTp8NWVG-K8HmAe__1_-removebg-preview-removebg-preview%20(2).png?updatedAt=1774636861114",
     signUrl: "https://ik.imagekit.io/bhupeshb7/mgvm-sign-removebg-preview.png",
   },
-  student: {
-    name: "Rahul Kumar Sharma",
-    fatherName: "Rajesh Kumar Sharma",
-    motherName: "Sunita Sharma",
-    class: "Class X - Section A",
-    rollNo: "2025-X-042",
-    session: "2025-2026",
-  },
-  marks: [
-    { subject: "Hindi", obtained: 78, max: 100 },
-    { subject: "English", obtained: 82, max: 100 },
-    { subject: "Mathematics", obtained: 91, max: 100 },
-    { subject: "Science", obtained: 87, max: 100 },
-    { subject: "Social Science", obtained: 74, max: 100 },
-    { subject: "Sanskrit", obtained: 69, max: 100 },
+  students: [
+    {
+      name: "Test Student One",
+      fatherName: "Father One",
+      motherName: "Mother One",
+      class: "UKG - Section A",
+      rollNo: "001",
+      marks: [
+        { subject: "Hindi", obtained: 66, max: 100 },
+        { subject: "English", obtained: 77, max: 100 },
+        { subject: "Mathematics", obtained: 88, max: 100 },
+        { subject: "Science", obtained: 89, max: 100 },
+      ],
+    },
+    {
+      name: "Test Student Two",
+      fatherName: "Father Two",
+      motherName: "Mother Two",
+      class: "UKG - Section A",
+      rollNo: "002",
+      marks: [
+        { subject: "Hindi", obtained: 88, max: 100 },
+        { subject: "English", obtained: 87, max: 100 },
+        { subject: "Mathematics", obtained: 80, max: 100 },
+        { subject: "Science", obtained: 79, max: 100 },
+      ],
+    },
   ],
 };
 
@@ -36,22 +47,39 @@ async function generateMarksheet(req, res) {
     const payload =
       req.body && Object.keys(req.body).length > 0 ? req.body : samplePayload;
 
-    if (!payload.school || !payload.student || !payload.marks) {
-      return res.status(400).json({
-        error: "Missing required fields: school, student, marks",
-      });
+    if (!payload.school) {
+      return res.status(400).json({ error: "Missing required field: school" });
     }
 
-    if (!Array.isArray(payload.marks) || payload.marks.length === 0) {
-      return res.status(400).json({ error: "marks must be a non-empty array" });
+    if (!Array.isArray(payload.students) || payload.students.length < 2) {
+      return res
+        .status(400)
+        .json({ error: "Two students are required in the students array" });
+    }
+
+    for (let i = 0; i < 2; i++) {
+      const student = payload.students[i];
+      if (!student) {
+        return res
+          .status(400)
+          .json({ error: `Student ${i + 1} data is missing` });
+      }
+      if (!Array.isArray(student.marks) || student.marks.length === 0) {
+        return res.status(400).json({
+          error: `Student ${i + 1}: marks must be a non-empty array`,
+        });
+      }
     }
 
     const pdfBuffer = await generateMarksheetPdf(payload);
 
-    const studentName = (payload.student.name || "student")
+    const s1Name = (payload.students[0].name || "student1")
       .replace(/\s+/g, "_")
       .toLowerCase();
-    const filename = `marksheet_${studentName}_${Date.now()}.pdf`;
+    const s2Name = (payload.students[1].name || "student2")
+      .replace(/\s+/g, "_")
+      .toLowerCase();
+    const filename = `marksheet_${s1Name}_${s2Name}_${Date.now()}.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -73,7 +101,7 @@ async function generateSampleMarksheet(req, res) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      'attachment; filename="sample_marksheet.pdf"',
+      'attachment; filename="sample_marksheet.pdf"'
     );
     res.setHeader("Content-Length", pdfBuffer.length);
 

@@ -2,11 +2,12 @@ const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 
 const PW = 595.28;
 const PH = 841.89;
-const ML = 32;
-const MR = 32;
+const ML = 28;
+const MR = 28;
 const CW = PW - ML - MR;
 const RX = PW - MR;
 const CX = PW / 2;
+const HALF_H = PH / 2;
 
 const C = {
   ink: rgb(0.06, 0.09, 0.2),
@@ -27,9 +28,7 @@ const C = {
   border: rgb(0.8, 0.82, 0.88),
   rowAlt: rgb(0.96, 0.97, 1.0),
   passGreen: rgb(0.05, 0.52, 0.22),
-  passBg: rgb(0.9, 0.98, 0.93),
   failRed: rgb(0.75, 0.12, 0.12),
-  failBg: rgb(0.99, 0.92, 0.92),
   gradA: rgb(0.05, 0.48, 0.28),
   gradB: rgb(0.1, 0.38, 0.68),
   gradC: rgb(0.7, 0.45, 0.05),
@@ -55,11 +54,6 @@ function vl(page, x, y1, y2, t, color) {
 function box(page, x, y, w, h, opts) {
   page.drawRectangle({ x, y: y - h, width: w, height: h, ...(opts || {}) });
 }
-function cText(page, text, font, size, color, y, x1, x2) {
-  const tw = font.widthOfTextAtSize(text, size);
-  const mx = x1 !== undefined ? (x1 + x2) / 2 : CX;
-  page.drawText(text, { x: mx - tw / 2, y, size, font, color });
-}
 
 function gradeFromPct(pct) {
   if (pct >= 90) return { grade: "A+", label: "Outstanding" };
@@ -78,161 +72,6 @@ function divisionFromPct(pct) {
   return "FAIL";
 }
 
-function drawPageBackground(page, pdfDoc, schoolLogo) {
-  box(page, 0, PH, PW, PH, { color: C.white });
-
-  box(page, 0, PH, PW, 7, { color: C.ink });
-  box(page, 0, 7, PW, 3.5, { color: C.gold });
-  box(page, 0, 10.5, PW, 1.5, { color: C.inkLight });
-
-  box(page, 0, 12, PW, 1.5, { color: C.inkLight });
-  box(page, 0, 10.5, PW, 1.5, { color: C.gold });
-
-  box(page, 0, 0, PW, 7, { color: C.ink });
-  box(page, 0, 7, PW, 3.5, { color: C.gold });
-  box(page, 0, 10.5, PW, 1.5, { color: C.inkLight });
-
-  const outerPad = 15;
-  page.drawRectangle({
-    x: outerPad,
-    y: outerPad,
-    width: PW - outerPad * 2,
-    height: PH - outerPad * 2,
-    borderColor: C.ink,
-    borderWidth: 2,
-  });
-  page.drawRectangle({
-    x: outerPad + 1.5,
-    y: outerPad + 1.5,
-    width: PW - (outerPad + 3.5) * 2,
-    height: PH - (outerPad + 3.5) * 2,
-    borderColor: C.gold,
-    borderWidth: 0.9,
-  });
-  page.drawRectangle({
-    x: outerPad + 6,
-    y: outerPad + 6,
-    width: PW - (outerPad + 6) * 2,
-    height: PH - (outerPad + 6) * 2,
-    borderColor: C.inkSoft,
-    borderWidth: 0.35,
-  });
-
-  function drawCorner(cx, cy, sx, sy) {
-    const arm = 22;
-    hl(page, cx, cx + arm * sx, cy, 1.6, C.gold);
-    vl(page, cx, cy, cy + arm * sy, 1.6, C.gold);
-    hl(page, cx + 3 * sx, cx + (arm - 2) * sx, cy + 3 * sy, 0.5, C.goldLight);
-    vl(page, cx + 3 * sx, cy + 3 * sy, cy + (arm - 2) * sy, 0.5, C.goldLight);
-    page.drawEllipse({ x: cx, y: cy, xScale: 2.5, yScale: 2.5, color: C.gold });
-    page.drawEllipse({
-      x: cx,
-      y: cy,
-      xScale: 1.5,
-      yScale: 1.5,
-      color: C.goldLight,
-    });
-    page.drawEllipse({
-      x: cx + arm * sx,
-      y: cy,
-      xScale: 2.5,
-      yScale: 2.5,
-      color: C.gold,
-    });
-    page.drawEllipse({
-      x: cx,
-      y: cy + arm * sy,
-      xScale: 2.5,
-      yScale: 2.5,
-      color: C.gold,
-    });
-  }
-
-  const cp = outerPad + 7;
-  drawCorner(cp, PH - cp, 1, -1);
-  drawCorner(PW - cp, PH - cp, -1, -1);
-  drawCorner(cp, cp, 1, 1);
-  drawCorner(PW - cp, cp, -1, 1);
-
-  function sideDiamond(x, y) {
-    const s = 5;
-    [
-      [-s, 0],
-      [0, s],
-      [s, 0],
-      [0, -s],
-      [-s, 0],
-    ].reduce((prev, cur) => {
-      if (prev) {
-        page.drawLine({
-          start: { x: x + prev[0], y: y + prev[1] },
-          end: { x: x + cur[0], y: y + cur[1] },
-          thickness: 0.9,
-          color: C.goldLight,
-        });
-      }
-      return cur;
-    }, null);
-    page.drawEllipse({ x, y, xScale: 2, yScale: 2, color: C.gold });
-  }
-
-  sideDiamond(outerPad + 5, PH / 2);
-  sideDiamond(PW - outerPad - 5, PH / 2);
-
-  function floral(cx, cy, r, petals, colR, colG, colB) {
-    for (let i = 0; i < petals; i++) {
-      const angle = (i / petals) * Math.PI * 2;
-      const px = cx + Math.cos(angle) * r;
-      const py = cy + Math.sin(angle) * r;
-      page.drawEllipse({
-        x: px,
-        y: py,
-        xScale: r * 0.35,
-        yScale: r * 0.16,
-        color: rgb(colR, colG, colB),
-        opacity: 0.06,
-      });
-    }
-    for (let i = 0; i < petals; i++) {
-      const angle = (i / petals) * Math.PI * 2 + Math.PI / petals;
-      const px = cx + Math.cos(angle) * r * 0.55;
-      const py = cy + Math.sin(angle) * r * 0.55;
-      page.drawEllipse({
-        x: px,
-        y: py,
-        xScale: r * 0.22,
-        yScale: r * 0.1,
-        color: rgb(colR, colG, colB),
-        opacity: 0.04,
-      });
-    }
-    page.drawEllipse({
-      x: cx,
-      y: cy,
-      xScale: r * 0.18,
-      yScale: r * 0.18,
-      color: rgb(colR, colG, colB),
-      opacity: 0.08,
-    });
-  }
-
-  floral(CX, PH / 2, 55, 12, 0.8, 0.64, 0.18);
-  floral(CX, PH / 2, 32, 8, 0.18, 0.28, 0.52);
-
-  if (schoolLogo) {
-    const logoSize = 90;
-    const logoX = CX - logoSize / 2;
-    const logoY = PH / 2 - logoSize / 2;
-    page.drawImage(schoolLogo, {
-      x: logoX,
-      y: logoY,
-      width: logoSize,
-      height: logoSize,
-      opacity: 0.08,
-    });
-  }
-}
-
 async function embedImage(pdfDoc, url) {
   if (!url) return null;
   try {
@@ -241,20 +80,77 @@ async function embedImage(pdfDoc, url) {
     const buf = new Uint8Array(await res.arrayBuffer());
     try {
       return await pdfDoc.embedPng(buf);
-    } catch (e) {}
+    } catch (_) {}
     try {
       return await pdfDoc.embedJpg(buf);
-    } catch (e) {}
+    } catch (_) {}
     return null;
-  } catch (e) {
+  } catch (_) {
     return null;
   }
 }
 
-async function drawHeader(page, pdfDoc, school, bold, regular) {
-  const TOP_MARGIN = 9;
-  const HH = 158;
-  const hTop = PH - 20 - TOP_MARGIN;
+function drawHalfBackground(page, topY, bottomY) {
+  box(page, ML - 8, topY, CW + 16, topY - bottomY, { color: C.white });
+
+  const outerPad = 10;
+  page.drawRectangle({
+    x: ML - 6,
+    y: bottomY + outerPad,
+    width: CW + 12,
+    height: topY - bottomY - outerPad * 2,
+    borderColor: C.ink,
+    borderWidth: 1.2,
+  });
+  page.drawRectangle({
+    x: ML - 4,
+    y: bottomY + outerPad + 2,
+    width: CW + 8,
+    height: topY - bottomY - outerPad * 2 - 4,
+    borderColor: C.gold,
+    borderWidth: 0.5,
+  });
+
+  function drawCorner(cx, cy, sx, sy) {
+    const arm = 14;
+    hl(page, cx, cx + arm * sx, cy, 1.2, C.gold);
+    vl(page, cx, cy, cy + arm * sy, 1.2, C.gold);
+    page.drawEllipse({ x: cx, y: cy, xScale: 2, yScale: 2, color: C.gold });
+    page.drawEllipse({
+      x: cx + arm * sx,
+      y: cy,
+      xScale: 1.5,
+      yScale: 1.5,
+      color: C.goldLight,
+    });
+    page.drawEllipse({
+      x: cx,
+      y: cy + arm * sy,
+      xScale: 1.5,
+      yScale: 1.5,
+      color: C.goldLight,
+    });
+  }
+
+  const cp = ML - 6 + outerPad;
+  const cpR = RX + 6 - outerPad;
+  drawCorner(cp, topY - outerPad, 1, -1);
+  drawCorner(cpR, topY - outerPad, -1, -1);
+  drawCorner(cp, bottomY + outerPad, 1, 1);
+  drawCorner(cpR, bottomY + outerPad, -1, 1);
+}
+
+async function drawHalfHeader(
+  page,
+  pdfDoc,
+  school,
+  bold,
+  regular,
+  topY,
+  logoImg,
+) {
+  const HH = 70;
+  const hTop = topY - 14;
   const hBot = hTop - HH;
 
   for (let i = 0; i <= HH; i++) {
@@ -265,18 +161,10 @@ async function drawHeader(page, pdfDoc, school, bold, regular) {
     box(page, ML, hTop - i, CW, 1, { color: rgb(r, g, b) });
   }
 
-  for (let i = 0; i < 18; i++) {
-    const gx = ML + (i + 0.5) * (CW / 18);
-    box(page, gx, hBot, 1, HH, { color: rgb(1, 1, 1), opacity: 0.015 });
-  }
-
-  box(page, ML, hTop, CW, 4.5, { color: C.gold });
-  box(page, ML, hTop - 4.5, CW, 1.5, { color: C.goldLight });
-  box(page, ML, hTop - 6, CW, 0.5, { color: rgb(1, 1, 1), opacity: 0.15 });
-
-  box(page, ML, hBot + 5, CW, 3, { color: C.gold });
-  box(page, ML, hBot + 2, CW, 1.2, { color: C.goldLight });
-  box(page, ML, hBot + 0.8, CW, 0.5, { color: C.inkSoft });
+  box(page, ML, hTop, CW, 3.5, { color: C.gold });
+  box(page, ML, hTop - 3.5, CW, 1, { color: C.goldLight });
+  box(page, ML, hBot + 4, CW, 2.5, { color: C.gold });
+  box(page, ML, hBot + 1.5, CW, 1, { color: C.goldLight });
 
   function heraldDot(x, y, size) {
     page.drawEllipse({ x, y, xScale: size, yScale: size, color: C.gold });
@@ -288,16 +176,15 @@ async function drawHeader(page, pdfDoc, school, bold, regular) {
       color: C.goldLight,
     });
   }
-  for (let i = 0; i <= 18; i++) {
-    heraldDot(ML + i * (CW / 18), hTop - 2.2, 3);
-    heraldDot(ML + i * (CW / 18), hBot + 3.5, 2.2);
+  for (let i = 0; i <= 14; i++) {
+    heraldDot(ML + i * (CW / 14), hTop - 1.8, 2.2);
+    heraldDot(ML + i * (CW / 14), hBot + 3, 1.8);
   }
 
-  const logoImg = await embedImage(pdfDoc, school.logoUrl);
-  const logoSize = 55;
-  const lPad = 15;
+  const logoSize = 42;
+  const lPad = 12;
   const logoX = ML + lPad;
-  const logoCY = hBot + HH / 2 + 4;
+  const logoCY = hBot + HH / 2 + 2;
 
   if (logoImg) {
     const asp = logoImg.width / logoImg.height;
@@ -309,330 +196,190 @@ async function drawHeader(page, pdfDoc, school, bold, regular) {
       width: iW,
       height: iH,
     });
-  } else {
-    const initials = school.name
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => w[0].toUpperCase())
-      .join("");
-    page.drawText(initials, {
-      x: logoX + logoSize / 2 - bold.widthOfTextAtSize(initials, 26) / 2,
-      y: logoCY - 10,
-      size: 26,
-      font: bold,
-      color: C.gold,
-    });
   }
 
-  const txtL = ML + lPad + logoSize + lPad + 10;
-  const txtCX = (txtL + RX - 6) / 2;
-
-  const SCHOOL_NAME_TOP_MARGIN = 35;
-  const decorY1 = hTop - SCHOOL_NAME_TOP_MARGIN;
+  const txtL = ML + lPad + logoSize + lPad + 6;
   const dividerW = RX - 6 - txtL;
   const divCX = txtL + dividerW / 2;
 
   const schoolName = school.name.toUpperCase();
-  const snSize = schoolName.length > 32 ? 22 : schoolName.length > 22 ? 26 : 30;
+  const snSize = schoolName.length > 32 ? 13 : schoolName.length > 22 ? 15 : 17;
   const snW = bold.widthOfTextAtSize(schoolName, snSize);
   page.drawText(schoolName, {
     x: divCX - snW / 2,
-    y: decorY1,
+    y: hTop - 20,
     size: snSize,
     font: bold,
     color: C.gold,
   });
 
-  const underlineY = decorY1 - 5;
-  const ulW = Math.min(snW + 40, dividerW - 10);
-  hl(page, divCX - ulW / 2, divCX + ulW / 2, underlineY, 1.2, C.gold);
-  hl(
-    page,
-    divCX - ulW / 2 + 8,
-    divCX + ulW / 2 - 8,
-    underlineY - 2.5,
-    0.4,
-    C.goldLight,
-  );
+  const ulY = hTop - 26;
+  const ulW = Math.min(snW + 30, dividerW - 10);
+  hl(page, divCX - ulW / 2, divCX + ulW / 2, ulY, 0.9, C.gold);
+  hl(page, divCX - ulW / 2 + 6, divCX + ulW / 2 - 6, ulY - 2, 0.3, C.goldLight);
 
-  page.drawEllipse({
-    x: divCX - ulW / 2 - 4,
-    y: underlineY - 1,
-    xScale: 2.5,
-    yScale: 2.5,
-    color: C.gold,
-  });
-  page.drawEllipse({
-    x: divCX + ulW / 2 + 4,
-    y: underlineY - 1,
-    xScale: 2.5,
-    yScale: 2.5,
-    color: C.gold,
-  });
-
-  if (school.affiliation) {
-    const afW = regular.widthOfTextAtSize(school.affiliation, 7.8);
-    page.drawText(school.affiliation, {
-      x: divCX - afW / 2,
-      y: underlineY - 14,
-      size: 7.8,
-      font: regular,
-      color: C.goldLight,
-    });
-  }
-
-  const addrFontSize = 11.5;
-  const addrLineY = underlineY - (school.affiliation ? 28 : 16);
+  const addrFontSize = 7.5;
   const addrW = regular.widthOfTextAtSize(school.address, addrFontSize);
   page.drawText(school.address, {
     x: divCX - addrW / 2,
-    y: addrLineY - 4,
+    y: ulY - 12,
     size: addrFontSize,
     font: regular,
     color: C.mist,
   });
-
-  const contacts = [];
-  if (school.phone) contacts.push(school.phone);
-  if (school.email) contacts.push(school.email);
-  const cLine = contacts.join("        ");
-  const contactFontSize = 9;
-  const clW = regular.widthOfTextAtSize(cLine, contactFontSize);
-  page.drawText(cLine, {
-    x: divCX - clW / 2,
-    y: addrLineY - 13 - 4,
-    size: contactFontSize,
-    font: regular,
-    color: C.mist,
-  });
-
-  const sepY = addrLineY - 26;
-  const sepW = dividerW * 0.7;
-  hl(page, divCX - sepW / 2, divCX + sepW / 2, sepY, 0.4, C.inkSoft);
-  page.drawEllipse({
-    x: divCX,
-    y: sepY,
-    xScale: 2.8,
-    yScale: 2.8,
-    color: C.gold,
-    opacity: 0.5,
-  });
-  page.drawEllipse({
-    x: divCX - sepW / 2 - 5,
-    y: sepY,
-    xScale: 1.8,
-    yScale: 1.8,
-    color: C.goldLight,
-    opacity: 0.6,
-  });
-  page.drawEllipse({
-    x: divCX + sepW / 2 + 5,
-    y: sepY,
-    xScale: 1.8,
-    yScale: 1.8,
-    color: C.goldLight,
-    opacity: 0.6,
-  });
-
-  const examLine =
-    (school.examType || "ANNUAL").toUpperCase() +
-    "  EXAMINATION     \u2022     SESSION  " +
-    (school.session || "");
-  const elSize = 8;
-  const elW = bold.widthOfTextAtSize(examLine, elSize);
-  page.drawText(examLine, {
-    x: divCX - elW / 2,
-    y: sepY - 13 - 4,
-    size: elSize,
-    font: bold,
-    color: C.goldLight,
-  });
+ 
+ const sepY = ulY - 24;
+  // hl line removed — no horizontal line near MARK SHEET
 
   const msTitle = "MARK  SHEET";
-  const msSize = 11.5;
+  const msSize = 9;
   const msW = bold.widthOfTextAtSize(msTitle, msSize);
-  const msX = divCX - msW / 2;
-  const msY = hBot + 16;
-
-  const pillW = msW + 36;
-  const pillH = 20;
+  const pillW = msW + 28;
+  const pillH = 15;
   const pillX = divCX - pillW / 2;
+  const msY = hBot + 10;
 
   box(page, pillX, msY + pillH - 2, pillW, pillH, {
-    color: rgb(1, 1, 1),
-    opacity: 0.1,
+    color: C.ink,
     borderColor: C.gold,
-    borderWidth: 0.9,
+    borderWidth: 1,
   });
-  box(page, pillX + 3, msY + pillH - 5, pillW - 6, pillH - 6, {
-    color: rgb(1, 1, 1),
-    opacity: 0.05,
-    borderColor: C.goldLight,
-    borderWidth: 0.4,
-  });
-
-  for (let i = 0; i < 4; i++) {
-    const dotSpacing = pillW / 5;
-    const dotY = msY + pillH - 2 - pillH / 2;
-    page.drawEllipse({
-      x: pillX + (i + 1) * dotSpacing,
-      y: dotY,
-      xScale: 0.8,
-      yScale: 0.8,
-      color: C.goldLight,
-      opacity: 0.2,
-    });
-  }
-
   page.drawText(msTitle, {
-    x: msX,
-    y: msY + 4,
+    x: divCX - msW / 2,
+    y: msY + 2,
     size: msSize,
     font: bold,
-    color: C.white,
+    color: C.gold,
   });
 
   return hBot;
 }
 
-function drawStudentDetails(page, fonts, student, startY) {
+function drawStudentInfo(page, fonts, student, startY) {
   const { bold, regular } = fonts;
-  let y = startY - 10;
+  let y = startY - 5;
 
-  const SH = 22;
+  const SH = 16;
   box(page, ML, y, CW, SH, { color: C.ink });
   page.drawText("STUDENT INFORMATION", {
-    x: ML + 16,
-    y: y - SH + 8,
-    size: 8.5,
+    x: ML + 12,
+    y: y - SH + 5,
+    size: 7,
     font: bold,
     color: C.gold,
   });
-  const dotX = RX - 12;
   page.drawEllipse({
-    x: dotX,
+    x: RX - 10,
     y: y - SH / 2,
-    xScale: 3,
-    yScale: 3,
+    xScale: 2.5,
+    yScale: 2.5,
     color: C.gold,
   });
   page.drawEllipse({
-    x: dotX - 10,
+    x: RX - 18,
     y: y - SH / 2,
-    xScale: 2,
-    yScale: 2,
-    color: C.goldLight,
-  });
-  page.drawEllipse({
-    x: dotX - 18,
-    y: y - SH / 2,
-    xScale: 2,
-    yScale: 2,
+    xScale: 1.5,
+    yScale: 1.5,
     color: C.goldLight,
   });
   y -= SH;
 
-  const colW = CW / 2;
+  const c1W = CW * 0.38;
+  const c2W = CW * 0.33;
+  const c3W = CW - c1W - c2W;
+  const cXArr = [ML, ML + c1W, ML + c1W + c2W];
+
   const rows = [
     [
-      { label: "Student Name", value: (student.name || "").toUpperCase() },
-      { label: "Roll Number", value: student.rollNo || "" },
-    ],
-    [
+      {
+        label: "Student Name",
+        value: (student.name || "").toUpperCase(),
+        isBold: true,
+      },
       {
         label: "Father's Name",
         value: (student.fatherName || "").toUpperCase(),
       },
-      { label: "Class / Section", value: student.class || "" },
+      { label: "Roll Number", value: student.rollNo || "" },
     ],
     [
       {
         label: "Mother's Name",
         value: (student.motherName || "").toUpperCase(),
       },
-      { label: "Academic Session", value: student.session || "" },
+      { label: "Class / Section", value: student.class || "" },
+      {
+        label: "Exam Type",
+        value: (student.examType || "Annual").toUpperCase(),
+      },
     ],
   ];
 
   rows.forEach((row, ri) => {
-    const RH = 28;
+    const RH = 22;
     const rowY = y;
     const bg = ri % 2 === 0 ? C.white : C.paleCream;
     box(page, ML, rowY, CW, RH, { color: bg });
-
-    const accentCol = ri % 2 === 0 ? C.inkLight : C.gold;
-    box(page, ML, rowY, 3, RH, { color: accentCol });
-
-    hl(page, ML, RX, rowY - RH, 0.4, C.border);
+    box(page, ML, rowY, 3, RH, { color: ri % 2 === 0 ? C.inkLight : C.gold });
+    hl(page, ML, RX, rowY - RH, 0.3, C.border);
 
     row.forEach((cell, ci) => {
-      const cx = ci === 0 ? ML : ML + colW;
-      if (ci === 1) vl(page, ML + colW, rowY, rowY - RH, 0.4, C.border);
-
+      if (ci > 0) vl(page, cXArr[ci], rowY, rowY - RH, 0.3, C.border);
+      const cellX = cXArr[ci] + (ci === 0 ? 8 : 6);
       page.drawText(cell.label.toUpperCase(), {
-        x: cx + (ci === 0 ? 10 : 8),
-        y: rowY - 10,
-        size: 5.8,
+        x: cellX,
+        y: rowY - 8,
+        size: 4.8,
         font: bold,
         color: C.inkSoft,
       });
-
-      const val =
-        (cell.value || "").length > 30
-          ? cell.value.substring(0, 30) + "..."
-          : cell.value || "";
+      const maxLen = ci === 0 ? 26 : 20;
+      const raw = cell.value || "";
+      const val = raw.length > maxLen ? raw.substring(0, maxLen) + "..." : raw;
       page.drawText(val, {
-        x: cx + (ci === 0 ? 10 : 8),
-        y: rowY - 22,
-        size: ci === 0 ? 9 : 8.5,
-        font: ci === 0 ? bold : regular,
+        x: cellX,
+        y: rowY - 18,
+        size: cell.isBold ? 7.5 : 7,
+        font: cell.isBold ? bold : regular,
         color: C.dark,
       });
     });
 
-    vl(page, RX, rowY, rowY - RH, 0.4, C.border);
+    vl(page, RX, rowY, rowY - RH, 0.3, C.border);
     y -= RH;
   });
 
-  hl(page, ML, RX, y, 1.2, C.inkLight);
-  hl(page, ML, RX, y - 1.5, 0.5, C.gold);
-  hl(page, ML, RX, y - 3, 0.3, C.goldLight);
+  hl(page, ML, RX, y, 0.8, C.gold);
+  hl(page, ML, RX, y - 1.5, 0.3, C.goldLight);
 
   return y;
 }
 
 function drawMarksTable(page, fonts, marks, startY) {
   const { bold, regular } = fonts;
-  let y = startY - 10;
+  let y = startY - 5;
 
-  const SH = 22;
+  const SH = 16;
   box(page, ML, y, CW, SH, { color: C.inkMid });
   page.drawText("ACADEMIC PERFORMANCE", {
-    x: ML + 16,
-    y: y - SH + 8,
-    size: 8.5,
+    x: ML + 12,
+    y: y - SH + 5,
+    size: 7,
     font: bold,
     color: C.gold,
   });
   page.drawEllipse({
-    x: RX - 12,
+    x: RX - 10,
     y: y - SH / 2,
-    xScale: 3,
-    yScale: 3,
+    xScale: 2.5,
+    yScale: 2.5,
     color: C.gold,
   });
   page.drawEllipse({
-    x: RX - 22,
+    x: RX - 18,
     y: y - SH / 2,
-    xScale: 2,
-    yScale: 2,
-    color: C.goldLight,
-  });
-  page.drawEllipse({
-    x: RX - 30,
-    y: y - SH / 2,
-    xScale: 2,
-    yScale: 2,
+    xScale: 1.5,
+    yScale: 1.5,
     color: C.goldLight,
   });
   y -= SH;
@@ -641,33 +388,30 @@ function drawMarksTable(page, fonts, marks, startY) {
   const cX = [ML];
   for (let i = 0; i < cW.length - 1; i++) cX.push(cX[i] + cW[i]);
 
-  const TRH = 23;
+  const TRH = 18;
   box(page, ML, y, CW, TRH, { color: C.inkLight });
-
   const hLabels = ["SUBJECT", "MAX MARKS", "MARKS OBTAINED", "GRADE"];
   hLabels.forEach((h, i) => {
-    const tw = bold.widthOfTextAtSize(h, 7.5);
-    const x = i === 0 ? cX[i] + 10 : cX[i] + cW[i] / 2 - tw / 2;
+    const tw = bold.widthOfTextAtSize(h, 6);
+    const x = i === 0 ? cX[i] + 8 : cX[i] + cW[i] / 2 - tw / 2;
     page.drawText(h, {
       x,
-      y: y - TRH + 8,
-      size: 7.5,
+      y: y - TRH + 6,
+      size: 6,
       font: bold,
       color: C.white,
     });
   });
-
-  for (let i = 1; i < cX.length; i++) {
-    vl(page, cX[i], y, y - TRH, 0.5, rgb(0.3, 0.42, 0.65));
-  }
-  vl(page, RX, y, y - TRH, 0.5, rgb(0.3, 0.42, 0.65));
+  for (let i = 1; i < cX.length; i++)
+    vl(page, cX[i], y, y - TRH, 0.4, rgb(0.3, 0.42, 0.65));
+  vl(page, RX, y, y - TRH, 0.4, rgb(0.3, 0.42, 0.65));
   y -= TRH;
 
   let totalObt = 0;
   let totalMax = 0;
 
   marks.forEach((row, idx) => {
-    const RH = 24;
+    const RH = 20;
     const bg = idx % 2 === 0 ? C.white : C.rowAlt;
     box(page, ML, y, CW, RH, { color: bg });
 
@@ -683,38 +427,37 @@ function drawMarksTable(page, fonts, marks, startY) {
             : C.gradF;
 
     box(page, ML, y, 3, RH, { color: idx % 2 === 0 ? C.inkSoft : C.gold });
-
-    hl(page, ML, RX, y, 0.3, C.border);
-    hl(page, ML, RX, y - RH, 0.3, C.border);
+    hl(page, ML, RX, y, 0.25, C.border);
+    hl(page, ML, RX, y - RH, 0.25, C.border);
     for (let i = 1; i < cX.length; i++)
-      vl(page, cX[i], y, y - RH, 0.3, C.border);
-    vl(page, RX, y, y - RH, 0.3, C.border);
+      vl(page, cX[i], y, y - RH, 0.25, C.border);
+    vl(page, RX, y, y - RH, 0.25, C.border);
 
     page.drawText(row.subject || "", {
-      x: cX[0] + 10,
-      y: y - 15,
-      size: 8.5,
+      x: cX[0] + 8,
+      y: y - 13,
+      size: 7.5,
       font: regular,
       color: C.dark,
     });
 
     const cols = [String(row.max), String(row.obtained)];
     cols.forEach((v, i) => {
-      const tw = regular.widthOfTextAtSize(v, 8.5);
+      const tw = regular.widthOfTextAtSize(v, 7.5);
       page.drawText(v, {
         x: cX[i + 1] + cW[i + 1] / 2 - tw / 2,
-        y: y - 15,
-        size: 8.5,
+        y: y - 13,
+        size: 7.5,
         font: regular,
         color: C.charcoal,
       });
     });
 
-    const gradeW = bold.widthOfTextAtSize(grade, 9);
+    const gradeW = bold.widthOfTextAtSize(grade, 8);
     page.drawText(grade, {
       x: cX[3] + cW[3] / 2 - gradeW / 2,
-      y: y - 15,
-      size: 9,
+      y: y - 13,
+      size: 8,
       font: bold,
       color: gradeColor,
     });
@@ -724,17 +467,16 @@ function drawMarksTable(page, fonts, marks, startY) {
     y -= RH;
   });
 
-  const TotH = 25;
+  const TotH = 20;
   box(page, ML, y, CW, TotH, { color: C.ink });
-
   for (let i = 1; i < cX.length; i++)
-    vl(page, cX[i], y, y - TotH, 0.4, C.inkSoft);
-  vl(page, RX, y, y - TotH, 0.4, C.inkSoft);
+    vl(page, cX[i], y, y - TotH, 0.35, C.inkSoft);
+  vl(page, RX, y, y - TotH, 0.35, C.inkSoft);
 
   page.drawText("GRAND TOTAL", {
-    x: cX[0] + 10,
-    y: y - 17,
-    size: 8.5,
+    x: cX[0] + 8,
+    y: y - 13,
+    size: 7,
     font: bold,
     color: C.goldLight,
   });
@@ -742,86 +484,61 @@ function drawMarksTable(page, fonts, marks, startY) {
   const totalPct = totalMax > 0 ? (totalObt / totalMax) * 100 : 0;
   const tCols = [String(totalMax), String(totalObt)];
   tCols.forEach((v, i) => {
-    const tw = bold.widthOfTextAtSize(v, 9);
+    const tw = bold.widthOfTextAtSize(v, 7.5);
     page.drawText(v, {
       x: cX[i + 1] + cW[i + 1] / 2 - tw / 2,
-      y: y - 17,
-      size: 9,
+      y: y - 13,
+      size: 7.5,
       font: bold,
       color: C.white,
     });
   });
 
   const { grade: tg } = gradeFromPct(totalPct);
-  const tgW = bold.widthOfTextAtSize(tg, 9.5);
+  const tgW = bold.widthOfTextAtSize(tg, 8);
   page.drawText(tg, {
     x: cX[3] + cW[3] / 2 - tgW / 2,
-    y: y - 17,
-    size: 9.5,
+    y: y - 13,
+    size: 8,
     font: bold,
     color: C.goldLight,
   });
 
   y -= TotH;
-  hl(page, ML, RX, y, 1.2, C.inkLight);
-  hl(page, ML, RX, y - 1.5, 0.5, C.gold);
-  hl(page, ML, RX, y - 3, 0.3, C.goldLight);
+  hl(page, ML, RX, y, 0.8, C.gold);
+  hl(page, ML, RX, y - 1.5, 0.3, C.goldLight);
 
   return { y, totalObt, totalMax };
 }
 
-async function drawSummary(page, fonts, totalObt, totalMax, startY, signUrl, pdfDoc) {
+async function drawResultSummary(
+  page,
+  fonts,
+  totalObt,
+  totalMax,
+  startY,
+  signUrl,
+  pdfDoc,
+) {
   const { bold, regular } = fonts;
-  let y = startY - 10;
-
-  const SH = 22;
-  box(page, ML, y, CW, SH, { color: C.ink });
-  page.drawText("RESULT SUMMARY", {
-    x: ML + 16,
-    y: y - SH + 8,
-    size: 8.5,
-    font: bold,
-    color: C.gold,
-  });
-  page.drawEllipse({
-    x: RX - 12,
-    y: y - SH / 2,
-    xScale: 3,
-    yScale: 3,
-    color: C.gold,
-  });
-  page.drawEllipse({
-    x: RX - 22,
-    y: y - SH / 2,
-    xScale: 2,
-    yScale: 2,
-    color: C.goldLight,
-  });
-  page.drawEllipse({
-    x: RX - 30,
-    y: y - SH / 2,
-    xScale: 2,
-    yScale: 2,
-    color: C.goldLight,
-  });
-  y -= SH;
+  let y = startY - 5;
 
   const pct = totalMax > 0 ? (totalObt / totalMax) * 100 : 0;
   const { grade, label } = gradeFromPct(pct);
   const division = divisionFromPct(pct);
   const isPassed = pct >= 33;
 
-  const cardH = 90;
+  const cardH = 52;
   for (let i = 0; i <= cardH; i++) {
     const t = i / cardH;
     const gv = 0.99 - t * 0.04;
     const gb = 0.96 - t * 0.03;
     box(page, ML, y - i, CW, 1, { color: rgb(gv, gv, gb) });
   }
-  hl(page, ML, RX, y, 0.5, C.border);
-  hl(page, ML, RX, y - cardH, 0.5, C.border);
-  vl(page, ML, y, y - cardH, 0.5, C.border);
-  vl(page, RX, y, y - cardH, 0.5, C.border);
+  hl(page, ML, RX, y, 0.4, C.border);
+  hl(page, ML, RX, y - cardH, 0.4, C.border);
+  vl(page, ML, y, y - cardH, 0.4, C.border);
+  vl(page, RX, y, y - cardH, 0.4, C.border);
 
   const bW = CW / 4;
   const blocks = [
@@ -846,133 +563,95 @@ async function drawSummary(page, fonts, totalObt, totalMax, startY, signUrl, pdf
     {
       label: "FINAL RESULT",
       value: isPassed ? "PASS" : "FAIL",
-      sub: "",
+      sub: "Grade: " + grade,
       topColor: isPassed ? C.passGreen : C.failRed,
     },
   ];
 
   blocks.forEach((bd, i) => {
     const bx = ML + i * bW;
-    if (i > 0) vl(page, bx, y, y - cardH, 0.5, C.border);
-
-    box(page, bx + (i > 0 ? 1 : 0), y, bW - (i > 0 ? 1 : 0), 4, {
+    if (i > 0) vl(page, bx, y, y - cardH, 0.4, C.border);
+    box(page, bx + (i > 0 ? 1 : 0), y, bW - (i > 0 ? 1 : 0), 3, {
       color: bd.topColor,
     });
 
-    const lW = bold.widthOfTextAtSize(bd.label, 6.2);
+    const lW = bold.widthOfTextAtSize(bd.label, 5.2);
     page.drawText(bd.label, {
       x: bx + bW / 2 - lW / 2,
-      y: y - 17,
-      size: 6.2,
+      y: y - 12,
+      size: 5.2,
       font: bold,
       color: C.slate,
     });
 
-    const valFontSize = i === 3 ? 24 : i === 1 ? 22 : 20;
+    const valFontSize = i === 3 ? 16 : 15;
     const valColor =
       i === 3 ? (isPassed ? C.passGreen : C.failRed) : C.inkLight;
     const vW = bold.widthOfTextAtSize(bd.value, valFontSize);
     page.drawText(bd.value, {
       x: bx + bW / 2 - vW / 2,
-      y: y - 50,
+      y: y - 32,
       size: valFontSize,
       font: bold,
       color: valColor,
     });
 
-    const sW = regular.widthOfTextAtSize(bd.sub, 7);
+    const sW = regular.widthOfTextAtSize(bd.sub, 5.5);
     page.drawText(bd.sub, {
       x: bx + bW / 2 - sW / 2,
-      y: y - 64,
-      size: 7,
+      y: y - 44,
+      size: 5.5,
       font: regular,
       color: C.slate,
     });
-
-    if (i === 3) {
-      const pillBg = isPassed ? C.passBg : C.failBg;
-      const pillBorder = isPassed ? C.passGreen : C.failRed;
-      const pillW = 60;
-      const pillX = bx + bW / 2 - pillW / 2;
-      box(page, pillX, y - 70, pillW, 14, {
-        color: pillBg,
-        borderColor: pillBorder,
-        borderWidth: 0.8,
-      });
-      const gradeLabel = "Grade: " + grade;
-      const glW = bold.widthOfTextAtSize(gradeLabel, 8);
-      page.drawText(gradeLabel, {
-        x: bx + bW / 2 - glW / 2,
-        y: y - 80,
-        size: 8,
-        font: bold,
-        color: pillBorder,
-      });
-    }
   });
 
   y -= cardH;
 
-  const sigH = 46 + 50;
+  const sigH = 34;
   box(page, ML, y, CW, sigH, { color: C.white });
-  hl(page, ML, RX, y, 0.4, C.border);
+  hl(page, ML, RX, y, 0.35, C.border);
   hl(page, ML, RX, y - sigH, 0.5, C.border);
-  vl(page, ML, y, y - sigH, 0.4, C.border);
-  vl(page, RX, y, y - sigH, 0.4, C.border);
-
-  const sigLineOffset = 50;
-  const sigLabelOffset = 53;
-  const sigSealOffset = 62;
+  vl(page, ML, y, y - sigH, 0.35, C.border);
+  vl(page, RX, y, y - sigH, 0.35, C.border);
 
   let signImage = null;
-  if (signUrl) {
-    signImage = await embedImage(pdfDoc, signUrl);
-  }
+  if (signUrl) signImage = await embedImage(pdfDoc, signUrl);
 
-  const classTeacherX = ML + CW * 0.1;
-  hl(page, classTeacherX, classTeacherX + 90, y - sigLineOffset, 0.6, C.inkSoft);
-
-  const classTeacherLabelW = regular.widthOfTextAtSize("Class Teacher", 6.5);
+  const classTeacherX = ML + CW * 0.08;
+  hl(page, classTeacherX, classTeacherX + 80, y - 20, 0.5, C.inkSoft);
+  const ctLW = regular.widthOfTextAtSize("Class Teacher", 5.5);
   page.drawText("Class Teacher", {
-    x: classTeacherX + 45 - classTeacherLabelW / 2,
-    y: y - sigLabelOffset - 20,
-    size: 6.5,
-    font: regular,
-    color: C.slate,
-  });
-  const sw = regular.widthOfTextAtSize("Signature & Seal", 5.5);
-  page.drawText("Signature & Seal", {
-    x: classTeacherX + 45 - sw / 2,
-    y: y - sigSealOffset,
+    x: classTeacherX + 40 - ctLW / 2,
+    y: y - 28,
     size: 5.5,
     font: regular,
-    color: C.mist,
+    color: C.slate,
   });
 
   const principalX = ML + CW * 0.76;
 
   if (signImage) {
-    const signWidth = 80;
-    const signHeight = 35;
-    const signX = principalX + 45 - signWidth / 2;
-    const signY = y - sigLineOffset - signHeight + 8;
-
+    const signWidth = 65;
+    const signHeight = 22;
     page.drawImage(signImage, {
-      x: signX,
-      y: signY,
+      x: principalX + 40 - signWidth / 2,
+      y: y - 23,
       width: signWidth,
       height: signHeight,
     });
   }
 
-  const principalLabelW = regular.widthOfTextAtSize("Principal", 6.5);
+  hl(page, principalX, principalX + 80, y - 20, 0.5, C.inkSoft);
+  const prLW = regular.widthOfTextAtSize("Principal", 5.5);
   page.drawText("Principal", {
-    x: principalX + 45 - principalLabelW / 2,
-    y: y - sigLabelOffset - 20,
-    size: 6.5,
+    x: principalX + 40 - prLW / 2,
+    y: y - 28,
+    size: 5.5,
     font: regular,
     color: C.slate,
-  }); 
+  });
+
   const dateStr =
     "Date: " +
     new Date().toLocaleDateString("en-IN", {
@@ -981,18 +660,16 @@ async function drawSummary(page, fonts, totalObt, totalMax, startY, signUrl, pdf
       year: "numeric",
     });
   page.drawText(dateStr, {
-    x: RX - regular.widthOfTextAtSize(dateStr, 6.5) - 6,
-    y: y - 10,
-    size: 6.5,
+    x: RX - regular.widthOfTextAtSize(dateStr, 5.5) - 6,
+    y: y - 8,
+    size: 5.5,
     font: regular,
     color: C.slate,
   });
 
   y -= sigH;
-
-  hl(page, ML, RX, y, 1.2, C.inkLight);
-  hl(page, ML, RX, y - 1.5, 0.5, C.gold);
-  hl(page, ML, RX, y - 3, 0.3, C.goldLight);
+  hl(page, ML, RX, y, 0.8, C.gold);
+  hl(page, ML, RX, y - 1.5, 0.3, C.goldLight);
 
   return y;
 }
@@ -1005,33 +682,73 @@ async function generateMarksheetPdf(data) {
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fonts = { bold, regular };
 
-  const schoolLogo = await embedImage(pdfDoc, data.school.logoUrl);
+  const logoImg = await embedImage(pdfDoc, data.school.logoUrl);
 
-  drawPageBackground(page, pdfDoc, schoolLogo);
+  box(page, 0, PH, PW, PH, { color: C.white });
 
   const school = {
     ...data.school,
     examType: data.examType || "Annual",
     session: data.session || new Date().getFullYear().toString(),
-    affiliation: data.school.affiliation || "",
   };
 
-  const student = {
-    ...data.student,
-    session: data.session || new Date().getFullYear().toString(),
-  };
+  const students = data.students || [];
+  const s1 = students[0] || {};
+  const s2 = students[1] || {};
 
-  const hBot = await drawHeader(page, pdfDoc, school, bold, regular);
-  let y = hBot;
-
-  y = drawStudentDetails(page, fonts, student, y);
+  drawHalfBackground(page, PH, HALF_H + 8);
+  const h1Bot = await drawHalfHeader(
+    page,
+    pdfDoc,
+    school,
+    bold,
+    regular,
+    PH,
+    logoImg,
+  );
+  let y1 = h1Bot;
+  y1 = drawStudentInfo(page, fonts, { ...s1, examType: school.examType }, y1);
   const {
-    y: afterTable,
-    totalObt,
-    totalMax,
-  } = drawMarksTable(page, fonts, data.marks, y);
+    y: y1a,
+    totalObt: to1,
+    totalMax: tm1,
+  } = drawMarksTable(page, fonts, s1.marks || [], y1);
+  await drawResultSummary(
+    page,
+    fonts,
+    to1,
+    tm1,
+    y1a,
+    data.school.signUrl,
+    pdfDoc,
+  );
 
-  await drawSummary(page, fonts, totalObt, totalMax, afterTable, data.school.signUrl, pdfDoc);
+  drawHalfBackground(page, HALF_H - 8, 0);
+  const h2Bot = await drawHalfHeader(
+    page,
+    pdfDoc,
+    school,
+    bold,
+    regular,
+    HALF_H - 10,
+    logoImg,
+  );
+  let y2 = h2Bot;
+  y2 = drawStudentInfo(page, fonts, { ...s2, examType: school.examType }, y2);
+  const {
+    y: y2a,
+    totalObt: to2,
+    totalMax: tm2,
+  } = drawMarksTable(page, fonts, s2.marks || [], y2);
+  await drawResultSummary(
+    page,
+    fonts,
+    to2,
+    tm2,
+    y2a,
+    data.school.signUrl,
+    pdfDoc,
+  );
 
   const bytes = await pdfDoc.save();
   return Buffer.from(bytes);
